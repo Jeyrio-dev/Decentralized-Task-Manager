@@ -130,7 +130,7 @@
 
 (define-private (range-iter (i uint) (acc (list 20 uint)))
   (if (<= i (var-get task-counter))
-    (cons (- i u1) acc)
+    (append acc (- i u1))
     acc
   )
 )
@@ -142,7 +142,7 @@
 (define-private (filter-tasks-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
   (let ((task (map-get? tasks { task-id: task-id })))
     (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner))
-      (cons (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }) acc)
+      (append acc (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }))
       acc
     )
   )
@@ -155,7 +155,7 @@
 (define-private (filter-collaborators-iter (index uint) (acc (list 20 principal)))
   (let ((collaborator (map-get? task-collaborators { task-id: task-id, collaborator: (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR) })))
     (if (and (is-some collaborator) (get active (unwrap! collaborator ERR_INVALID_COLLABORATOR)))
-      (cons (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR) acc)
+      (append acc (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR))
       acc
     )
   )
@@ -168,7 +168,7 @@
 (define-private (filter-tasks-by-priority-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
   (let ((task (map-get? tasks { task-id: task-id })))
     (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner) (is-eq (get priority (unwrap! task ERR_INVALID_TASK)) priority))
-      (cons (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }) acc)
+      (append acc (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }))
       acc
     )
   )
