@@ -1,30 +1,179 @@
+(define-constant ERR_INVALID_TASK (err u100))
+(define-constant ERR_NOT_AUTHORIZED (err u101))
+(define-constant ERR_ALREADY_COMPLETED (err u102))
+(define-constant ERR_NO_TASKS_FOUND (err u103))
+(define-constant ERR_INVALID_COLLABORATOR (err u104))
+(define-constant ERR_INVALID_PRIORITY (err u105))
+(define-data-var task-counter uint u0)
+(define-map tasks { task-id: uint } { description: (string-ascii 100), completed: bool, owner: principal, priority: uint })
+(define-map task-collaborators { task-id: uint, collaborator: principal } { active: bool })
 
-;; title: decentralized-task-manager
-;; version:
-;; summary:
-;; description:
+(define-public (create-task (description (string-ascii 100)))
+  (let ((task-id (var-get task-counter)))
+    (begin
+      (map-insert tasks { task-id: task-id } { description: description, completed: false, owner: tx-sender, priority: u0 })
+      (var-set task-counter (+ task-id u1))
+      (ok task-id)
+    )
+  )
+)
 
-;; traits
-;;
+(define-public (complete-task (task-id uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: true, owner: tx-sender, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; token definitions
-;;
+(define-public (update-task-description (task-id uint) (new-description (string-ascii 100)))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: new-description, completed: (get completed task), owner: tx-sender, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; constants
-;;
+(define-public (delete-task (task-id uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-delete tasks { task-id: task-id })
+      (ok true)
+    )
+  )
+)
 
-;; data vars
-;;
+(define-public (transfer-task-ownership (task-id uint) (new-owner principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: (get completed task), owner: new-owner, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; data maps
-;;
+(define-public (assign-task-collaborator (task-id uint) (collaborator principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (is-eq collaborator tx-sender)) ERR_INVALID_COLLABORATOR)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set task-collaborators { task-id: task-id, collaborator: collaborator } { active: true })
+      (ok true)
+    )
+  )
+)
 
-;; public functions
-;;
+(define-public (remove-task-collaborator (task-id uint) (collaborator principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-delete task-collaborators { task-id: task-id, collaborator: collaborator })
+      (ok true)
+    )
+  )
+)
 
-;; read only functions
-;;
+(define-public (set-task-priority (task-id uint) (priority uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (asserts! (<= priority u2) ERR_INVALID_PRIORITY)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: (get completed task), owner: tx-sender, priority: priority })
+      (ok true)
+    )
+  )
+)
 
-;; private functions
-;;
+(define-read-only (get-task (task-id uint))
+  (map-get? tasks { task-id: task-id })
+)
 
+(define-read-only (get-collaborators (task-id uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (filter-collaborators (range u20) task-id)
+  )
+)
+
+(define-read-only (get-tasks-by-owner (owner principal))
+  (let ((task-ids (range (var-get task-counter))))
+    (filter-tasks-by-owner task-ids owner)
+  )
+)
+
+(define-read-only (get-tasks-by-priority (owner principal) (priority uint))
+  (let ((task-ids (range (var-get task-counter))))
+    (filter-tasks-by-priority task-ids owner priority)
+  )
+)
+
+(define-private (range (n uint))
+  (let ((result (list u0)))
+    (if (> n u0)
+      (fold range-iter (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20) (list u0))
+      result
+    )
+  )
+)
+
+(define-private (range-iter (i uint) (acc (list 20 uint)))
+  (if (<= i (var-get task-counter))
+    (cons (- i u1) acc)
+    acc
+  )
+)
+
+(define-private (filter-tasks-by-owner (task-ids (list 20 uint)) (owner principal))
+  (fold filter-tasks-iter task-ids (list))
+)
+
+(define-private (filter-tasks-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
+  (let ((task (map-get? tasks { task-id: task-id })))
+    (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner))
+      (cons (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }) acc)
+      acc
+    )
+  )
+)
+
+(define-private (filter-collaborators (indices (list 20 uint)) (task-id uint))
+  (fold filter-collaborators-iter indices (list))
+)
+
+(define-private (filter-collaborators-iter (index uint) (acc (list 20 principal)))
+  (let ((collaborator (map-get? task-collaborators { task-id: task-id, collaborator: (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR) })))
+    (if (and (is-some collaborator) (get active (unwrap! collaborator ERR_INVALID_COLLABORATOR)))
+      (cons (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR) acc)
+      acc
+    )
+  )
+)
+
+(define-private (filter-tasks-by-priority (task-ids (list 20 uint)) (owner principal) (priority uint))
+  (fold filter-tasks-by-priority-iter task-ids (list))
+)
+
+(define-private (filter-tasks-by-priority-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
+  (let ((task (map-get? tasks { task-id: task-id })))
+    (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner) (is-eq (get priority (unwrap! task ERR_INVALID_TASK)) priority))
+      (cons (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }) acc)
+      acc
+    )
+  )
+)
+
+(define-private (principal-constructor (index uint))
+  (ok (as-contract tx-sender))
+)
