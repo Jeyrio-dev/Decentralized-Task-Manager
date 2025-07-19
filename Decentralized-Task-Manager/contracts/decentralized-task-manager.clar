@@ -4,7 +4,9 @@
 (define-constant ERR_NO_TASKS_FOUND (err u103))
 (define-constant ERR_INVALID_COLLABORATOR (err u104))
 (define-constant ERR_INVALID_PRIORITY (err u105))
+
 (define-data-var task-counter uint u0)
+
 (define-map tasks { task-id: uint } { description: (string-ascii 100), completed: bool, owner: principal, priority: uint })
 (define-map task-collaborators { task-id: uint, collaborator: principal } { active: bool })
 
@@ -101,63 +103,46 @@
   (map-get? tasks { task-id: task-id })
 )
 
-(define-read-only (get-collaborators (task-id uint))
-  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
-    (filter-collaborators (range u20) task-id)
-  )
-)
-
 (define-read-only (get-tasks-by-owner (owner principal))
-  (let ((task-ids (range (var-get task-counter))))
-    (filter-tasks-by-owner task-ids owner)
+  (let ((task-ids (generate-range (var-get task-counter))))
+    (ok (filter-tasks-by-owner task-ids owner))
   )
 )
 
 (define-read-only (get-tasks-by-priority (owner principal) (priority uint))
-  (let ((task-ids (range (var-get task-counter))))
-    (filter-tasks-by-priority task-ids owner priority)
+  (let ((task-ids (generate-range (var-get task-counter))))
+    (ok (filter-tasks-by-priority task-ids owner priority))
   )
 )
 
-(define-private (range (n uint))
-  (let ((result (list u0)))
-    (if (> n u0)
-      (fold range-iter (list u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19 u20) (list u0))
-      result
-    )
+(define-private (generate-range (n uint))
+  (if (> n u0)
+    (unwrap-panic (as-max-len? 
+      (fold generate-range-iter 
+        (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19) 
+        (list)) 
+      u20))
+    (list)
   )
 )
 
-(define-private (range-iter (i uint) (acc (list 20 uint)))
-  (if (<= i (var-get task-counter))
-    (append acc (- i u1))
+(define-private (generate-range-iter (i uint) (acc (list 20 uint)))
+  (if (< i (var-get task-counter))
+    (unwrap-panic (as-max-len? (append acc i) u20))
     acc
   )
 )
 
 (define-private (filter-tasks-by-owner (task-ids (list 20 uint)) (owner principal))
-  (fold filter-tasks-iter task-ids (list))
+  (fold filter-tasks-by-owner-iter task-ids (list))
 )
 
-(define-private (filter-tasks-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
-  (let ((task (map-get? tasks { task-id: task-id })))
-    (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner))
-      (append acc (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }))
-      acc
-    )
-  )
-)
-
-(define-private (filter-collaborators (indices (list 20 uint)) (task-id uint))
-  (fold filter-collaborators-iter indices (list))
-)
-
-(define-private (filter-collaborators-iter (index uint) (acc (list 20 principal)))
-  (let ((collaborator (map-get? task-collaborators { task-id: task-id, collaborator: (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR) })))
-    (if (and (is-some collaborator) (get active (unwrap! collaborator ERR_INVALID_COLLABORATOR)))
-      (append acc (unwrap! (principal-constructor index) ERR_INVALID_COLLABORATOR))
-      acc
-    )
+(define-private (filter-tasks-by-owner-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
+  (match (map-get? tasks { task-id: task-id })
+    task (if (is-eq (get owner task) owner)
+           (unwrap-panic (as-max-len? (append acc (merge task { task-id: task-id })) u20))
+           acc)
+    acc
   )
 )
 
@@ -166,14 +151,10 @@
 )
 
 (define-private (filter-tasks-by-priority-iter (task-id uint) (acc (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })))
-  (let ((task (map-get? tasks { task-id: task-id })))
-    (if (and (is-some task) (is-eq (get owner (unwrap! task ERR_INVALID_TASK)) owner) (is-eq (get priority (unwrap! task ERR_INVALID_TASK)) priority))
-      (append acc (merge (unwrap! task ERR_INVALID_TASK) { task-id: task-id }))
-      acc
-    )
+  (match (map-get? tasks { task-id: task-id })
+    task (if (and (is-eq (get owner task) owner) (is-eq (get priority task) priority))
+           (unwrap-panic (as-max-len? (append acc (merge task { task-id: task-id })) u20))
+           acc)
+    acc
   )
-)
-
-(define-private (principal-constructor (index uint))
-  (ok (as-contract tx-sender))
 )
