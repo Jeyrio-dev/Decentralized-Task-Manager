@@ -1,30 +1,159 @@
+(define-constant ERR_INVALID_TASK (err u100))
+(define-constant ERR_NOT_AUTHORIZED (err u101))
+(define-constant ERR_ALREADY_COMPLETED (err u102))
+(define-constant ERR_NO_TASKS_FOUND (err u103))
+(define-constant ERR_INVALID_COLLABORATOR (err u104))
+(define-constant ERR_INVALID_PRIORITY (err u105))
 
-;; title: decentralized-task-manager
-;; version:
-;; summary:
-;; description:
+(define-data-var task-counter uint u0)
 
-;; traits
-;;
+(define-map tasks { task-id: uint } { description: (string-ascii 100), completed: bool, owner: principal, priority: uint })
+(define-map task-collaborators { task-id: uint, collaborator: principal } { active: bool })
 
-;; token definitions
-;;
+(define-public (create-task (description (string-ascii 100)))
+  (let ((task-id (var-get task-counter)))
+    (begin
+      (map-insert tasks { task-id: task-id } { description: description, completed: false, owner: tx-sender, priority: u0 })
+      (var-set task-counter (+ task-id u1))
+      (ok task-id)
+    )
+  )
+)
 
-;; constants
-;;
+(define-public (complete-task (task-id uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: true, owner: tx-sender, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; data vars
-;;
+(define-public (update-task-description (task-id uint) (new-description (string-ascii 100)))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: new-description, completed: (get completed task), owner: tx-sender, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; data maps
-;;
+(define-public (delete-task (task-id uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-delete tasks { task-id: task-id })
+      (ok true)
+    )
+  )
+)
 
-;; public functions
-;;
+(define-public (transfer-task-ownership (task-id uint) (new-owner principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: (get completed task), owner: new-owner, priority: (get priority task) })
+      (ok true)
+    )
+  )
+)
 
-;; read only functions
-;;
+(define-public (assign-task-collaborator (task-id uint) (collaborator principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (is-eq collaborator tx-sender)) ERR_INVALID_COLLABORATOR)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-set task-collaborators { task-id: task-id, collaborator: collaborator } { active: true })
+      (ok true)
+    )
+  )
+)
 
-;; private functions
-;;
+(define-public (remove-task-collaborator (task-id uint) (collaborator principal))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (map-delete task-collaborators { task-id: task-id, collaborator: collaborator })
+      (ok true)
+    )
+  )
+)
 
+(define-public (set-task-priority (task-id uint) (priority uint))
+  (let ((task (unwrap! (map-get? tasks { task-id: task-id }) ERR_INVALID_TASK)))
+    (begin
+      (asserts! (is-eq (get owner task) tx-sender) ERR_NOT_AUTHORIZED)
+      (asserts! (not (get completed task)) ERR_ALREADY_COMPLETED)
+      (asserts! (<= priority u2) ERR_INVALID_PRIORITY)
+      (map-set tasks { task-id: task-id } { description: (get description task), completed: (get completed task), owner: tx-sender, priority: priority })
+      (ok true)
+    )
+  )
+)
+
+(define-read-only (get-task (task-id uint))
+  (map-get? tasks { task-id: task-id })
+)
+
+;; Helper function to build task list with task-id included
+(define-private (build-task-with-id (task-data { description: (string-ascii 100), completed: bool, owner: principal, priority: uint }) (task-id uint))
+  (merge task-data { task-id: task-id })
+)
+
+;; Simple iteration using fold with predefined list
+(define-read-only (get-tasks-by-owner (owner principal))
+  (let ((task-count (var-get task-counter)))
+    (if (> task-count u0)
+      (ok (get results (fold check-task-owner (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19) (tuple (target-owner owner) (results (list)) (max-id (- task-count u1))))))
+      (ok (list))
+    )
+  )
+)
+
+(define-read-only (get-tasks-by-priority (owner principal) (priority uint))
+  (let ((task-count (var-get task-counter)))
+    (if (> task-count u0)
+      (ok (get results (fold check-task-priority (list u0 u1 u2 u3 u4 u5 u6 u7 u8 u9 u10 u11 u12 u13 u14 u15 u16 u17 u18 u19) (tuple (target-owner owner) (target-priority priority) (results (list)) (max-id (- task-count u1))))))
+      (ok (list))
+    )
+  )
+)
+
+(define-private (check-task-owner (task-id uint) (state (tuple (target-owner principal) (results (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })) (max-id uint))))
+  (let ((target-owner (get target-owner state))
+        (results (get results state))
+        (max-id (get max-id state)))
+    (if (<= task-id max-id)
+      (match (map-get? tasks { task-id: task-id })
+        task (if (is-eq (get owner task) target-owner)
+               (tuple (target-owner target-owner) (results (unwrap-panic (as-max-len? (append results (build-task-with-id task task-id)) u20))) (max-id max-id))
+               (tuple (target-owner target-owner) (results results) (max-id max-id)))
+        (tuple (target-owner target-owner) (results results) (max-id max-id)))
+      (tuple (target-owner target-owner) (results results) (max-id max-id))
+    )
+  )
+)
+
+(define-private (check-task-priority (task-id uint) (state (tuple (target-owner principal) (target-priority uint) (results (list 20 { task-id: uint, description: (string-ascii 100), completed: bool, owner: principal, priority: uint })) (max-id uint))))
+  (let ((target-owner (get target-owner state))
+        (target-priority (get target-priority state))
+        (results (get results state))
+        (max-id (get max-id state)))
+    (if (<= task-id max-id)
+      (match (map-get? tasks { task-id: task-id })
+        task (if (and (is-eq (get owner task) target-owner) (is-eq (get priority task) target-priority))
+               (tuple (target-owner target-owner) (target-priority target-priority) (results (unwrap-panic (as-max-len? (append results (build-task-with-id task task-id)) u20))) (max-id max-id))
+               (tuple (target-owner target-owner) (target-priority target-priority) (results results) (max-id max-id)))
+        (tuple (target-owner target-owner) (target-priority target-priority) (results results) (max-id max-id)))
+      (tuple (target-owner target-owner) (target-priority target-priority) (results results) (max-id max-id))
+    )
+  )
+)
